@@ -22,10 +22,12 @@
 #include <unistd.h>
 #include <string.h>
 #include "ssdv.h"
+#include "rs8.h"
+
 
 void exit_usage()
 {
-	fprintf(stderr, "Usage: ssdv [-e|-d] [-t <percentage>] [-c <callsign>] [-i <id>] [<in file>] [<out file>]\n");
+	fprintf(stderr, "Usage: ssdv [-e|-d|-p <sub_id>] [-c <callsign>] [-i <id>] [<in file>] [<out file>]\n");
 	exit(-1);
 }
 
@@ -35,21 +37,25 @@ int main(int argc, char *argv[])
 	FILE *fin = stdin;
 	FILE *fout = stdout;
 	char encode = -1;
-	int droptest = 0;
 	char callsign[7];
 	uint8_t image_id = 0;
+	uint8_t subimage_id = 0;
 	ssdv_t ssdv;
 	
 	uint8_t pkt[SSDV_PKT_SIZE], b[128], *jpeg;
-	size_t jpeg_length;
+	uint8_t webpdata[WEBP_LEN] = WEBP_HEADER;
+	size_t r, jpeg_length;
 	
 	callsign[0] = '\0';
 	
 	opterr = 0;
-	while((c = getopt(argc, argv, "edc:i:t:")) != -1)
+	while((c = getopt(argc, argv, "edc:i:p:")) != -1)
 	{
 		switch(c)
 		{
+		case 'p': encode = 2;
+			subimage_id = atoi(optarg);
+			break;
 		case 'e': encode = 1; break;
 		case 'd': encode = 0; break;
 		case 'c':
@@ -58,7 +64,6 @@ int main(int argc, char *argv[])
 			strncpy(callsign, optarg, 7);
 			break;
 		case 'i': image_id = atoi(optarg); break;
-		case 't': droptest = atoi(optarg); break;
 		case '?': exit_usage();
 		}
 	}
@@ -97,8 +102,20 @@ int main(int argc, char *argv[])
 	switch(encode)
 	{
 	case 0: /* Decode */
-		if(droptest > 0) fprintf(stderr, "*** NOTE: Drop test enabled: %i ***\n", droptest);
-		
+		if(fread(pkt, 1, SSDV_PKT_SIZE, fin) > 0)
+		{
+			if( 0 == ssdv_dec_is_webp(pkt))
+			{
+				for ( i = WEBP_HEADER_LEN; i<WEBP_LEN; i++ ) {
+					webpdata[i] = pkt[i +WEBP_DATA_OFFSET -WEBP_HEADER_LEN];
+				}
+				//TODO: outfile name uses callsign+id+subid
+				// if(fout != stdout) fclose(fout);
+				fwrite(webpdata, 1, WEBP_LEN, fout);
+				fprintf(stderr, "Unpacked WebP image\n");
+				break;
+			}
+		}
 		ssdv_dec_init(&ssdv);
 		
 		jpeg_length = 1024 * 1024 * 4;
@@ -106,18 +123,15 @@ int main(int argc, char *argv[])
 		ssdv_dec_set_buffer(&ssdv, jpeg, jpeg_length);
 		
 		i = 0;
-		while(fread(pkt, 1, SSDV_PKT_SIZE, fin) > 0)
+		do
 		{
-			/* Drop % of packets */
-			if(droptest && (rand() / (RAND_MAX / 100) < droptest)) continue;
-			
 			/* Test the packet is valid */
 			if(ssdv_dec_is_packet(pkt, NULL) != 0) continue;
 			
 			/* Feed it to the decoder */
 			ssdv_dec_feed(&ssdv, pkt);
 			i++;
-		}
+		} while(fread(pkt, 1, SSDV_PKT_SIZE, fin) > 0);
 		
 		ssdv_dec_get_jpeg(&ssdv, &jpeg, &jpeg_length);
 		fwrite(jpeg, 1, jpeg_length, fout);
@@ -126,7 +140,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Read %i packets\n", i);
 		
 		break;
-	
+
 	case 1: /* Encode */
 		ssdv_enc_init(&ssdv, callsign, image_id);
 		ssdv_enc_set_buffer(&ssdv, pkt);
@@ -137,7 +151,7 @@ int main(int argc, char *argv[])
 		{
 			while((c = ssdv_enc_get_packet(&ssdv)) == SSDV_FEED_ME)
 			{
-				size_t r = fread(b, 1, 128, fin);
+				r = fread(b, 1, 128, fin);
 				
 				if(r <= 0)
 				{
@@ -166,6 +180,33 @@ int main(int argc, char *argv[])
 		
 		break;
 	
+	case 2:	/* webP Encoding */
+		pkt[0] = 0x55;
+		pkt[1] = 0x77;
+		i = encode_callsign(callsign);
+		pkt[2] = (uint8_t)(i>>24);
+		pkt[3] = (uint8_t)(i>>16);
+		pkt[4] = (uint8_t)(i>>8);
+		pkt[5] = (uint8_t)(i>>0); 
+		pkt[6] = (uint8_t)image_id;
+		pkt[7] = (uint8_t)subimage_id;
+
+		r = fread(&pkt[8], 1, WEBP_HEADER_LEN, fin);
+		//TODO: sanity check
+		r = fread(&pkt[8], 1, WEBP_DATA_LEN, fin);
+		//TODO: sanity check
+
+		i = crc32(&pkt[1], SSDV_PKT_SIZE_CRCDATA);
+		pkt[WEBP_CRC_OFFSET+0] = (uint8_t)(i>>24);
+		pkt[WEBP_CRC_OFFSET+1] = (uint8_t)(i>>16);
+		pkt[WEBP_CRC_OFFSET+2] = (uint8_t)(i>>8);
+		pkt[WEBP_CRC_OFFSET+3] = (uint8_t)(i>>0);
+
+		encode_rs_8(&pkt[1], &pkt[WEBP_FEC_OFFSET], 0);
+
+		fwrite(pkt, 1, SSDV_PKT_SIZE, fout);
+		fprintf(stderr, "Packed WebP SSDV packet.\n");
+		break;
 	default:
 		fprintf(stderr, "No mode specified.\n");
 		break;

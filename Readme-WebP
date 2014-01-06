@@ -1,0 +1,29 @@
+WebP is a free jpeg replacement from Google. https://developers.google.com/speed/webp/
+
+Advantages:
+	Smaller filesizes than Jpeg for any quality;
+	Libwebp tools allow easy import of jpegs, resize, crop and recompression;
+	File size can be chosen to match SSDV packets.
+
+Disadvantages:
+	Extra processing needed to compress;
+	Extra processing needed to decompress and convert back to jpeg;
+	Image size needs to be small because single errors cause total failure;
+
+Strategy:
+	Keep it simple;
+	Split large image into small WebP sub-images (max 232 bytes);
+	Send each sub-image as a 256-byte SSDV packet;
+	Re-assemble image and convert (back) to jpeg.
+
+Command line tools:
+
+	apt-get install libwebp
+
+	cwebp image.jpg -size 220 -pass 5 -crop 0 0 48 48 -o subimage.webp
+	ssdv -i 0 -p 0 -c <name> subimage.webp subimage.ssdv
+	cat subimage.ssdv >/dev/ttyAMA0
+
+	ssdv -d subimage.ssdv newsubimage.webp
+	dwebp -ppm newsubimage.webp -o newsubimage.ppm
+

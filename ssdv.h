@@ -129,11 +129,38 @@ typedef struct {
 	uint16_t mcu_count;
 } ssdv_packet_info_t;
 
+/* WebP packet */
+typedef struct {
+	// 0x55, 0x77;
+	uint32_t callsign;
+	uint8_t  image_id;
+	uint8_t  subimage_id;
+	// 212 bytes data
+	// 4 bytes crc;
+	// 32 bytes fec;
+	// = 256 bytes
+} ssdv_packet_webp_t;
+#define WEBP_DATA_OFFSET (2 +4 +2)
+#define WEBP_CRC_OFFSET (8 + 212)
+#define WEBP_FEC_OFFSET (220 + 4)
+
+/* Header: "RIFFxxxxWEBPVP8 yyyy", length 232 = 8 + 0xd0 = 20 + 0xc4. (0xc4 = 212 byte payload)*/
+#define WEBP_LEN (232)
+#define WEBP_HEADER_LEN (20)
+#define WEBP_DATA_LEN (WEBP_LEN - WEBP_HEADER_LEN)
+#define WEBP_HEADER {	0x52, 0x49, 0x46, 0x46, 0xd0, 0x00, 0x00, 0x00,\
+			0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x20,\
+			0xc4, 0x00, 0x00, 0x00, }
+
 /* Encoding */
 extern char ssdv_enc_init(ssdv_t *s, char *callsign, uint8_t image_id);
 extern char ssdv_enc_set_buffer(ssdv_t *s, uint8_t *buffer);
 extern char ssdv_enc_get_packet(ssdv_t *s);
 extern char ssdv_enc_feed(ssdv_t *s, uint8_t *buffer, size_t length);
+
+extern uint32_t crc32(void *data, size_t length);
+extern uint32_t encode_callsign(char *callsign);
+extern char ssdv_enc_webp(ssdv_t *s, uint8_t *buffer);
 
 /* Decoding */
 extern char ssdv_dec_init(ssdv_t *s);
@@ -143,6 +170,10 @@ extern char ssdv_dec_get_jpeg(ssdv_t *s, uint8_t **jpeg, size_t *length);
 
 extern char ssdv_dec_is_packet(uint8_t *packet, int *errors);
 extern void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet);
+
+extern char *decode_callsign(char *callsign, uint32_t code);
+extern char ssdv_dec_is_webp(uint8_t *packet);
+extern char ssdv_dec_webp(uint8_t *s, uint8_t *packet);
 
 #ifdef __cplusplus
 }

@@ -153,7 +153,7 @@ static void *dtblcpy(ssdv_t *s, const void *src, size_t n)
 	return(r);
 }
 
-static uint32_t crc32(void *data, size_t length)
+extern uint32_t crc32(void *data, size_t length)
 {
 	uint32_t crc, x;
 	uint8_t i, *d;
@@ -172,7 +172,7 @@ static uint32_t crc32(void *data, size_t length)
 	return(crc ^ 0xFFFFFFFF);
 }
 
-static uint32_t encode_callsign(char *callsign)
+extern uint32_t encode_callsign(char *callsign)
 {
 	uint32_t x;
 	char *c;
@@ -193,7 +193,7 @@ static uint32_t encode_callsign(char *callsign)
 	return(x);
 }
 
-static char *decode_callsign(char *callsign, uint32_t code)
+extern char *decode_callsign(char *callsign, uint32_t code)
 {
 	char *c, s;
 	
@@ -1260,6 +1260,31 @@ char ssdv_dec_get_jpeg(ssdv_t *s, uint8_t **jpeg, size_t *length)
 	return(SSDV_OK);
 }
 
+/* Seperate calls because we get stronger error correction by predicting packet id */
+char ssdv_dec_is_webp(uint8_t *packet)
+{
+	uint8_t pkt[SSDV_PKT_SIZE];
+	uint32_t e, i, x;
+
+	memcpy(pkt, packet, SSDV_PKT_SIZE);
+	pkt[0] = 0x55;
+	pkt[1] = 0x77;
+	e = decode_rs_8(&pkt[1], 0, 0, 0);
+	if(e < 0) return(e);
+
+	if(pkt[1] != 0x77) return(-1);
+	x = crc32(&pkt[1], SSDV_PKT_SIZE_CRCDATA);
+	
+	i = 1 + SSDV_PKT_SIZE_CRCDATA;
+	if(pkt[i++] != ((x >> 24) & 0xFF)) return(-1);
+	if(pkt[i++] != ((x >> 16) & 0xFF)) return(-1);
+	if(pkt[i++] != ((x >> 8) & 0xFF)) return(-1);
+	if(pkt[i++] != (x & 0xFF)) return(-1);
+
+	memcpy(packet, pkt, SSDV_PKT_SIZE);
+	return 0;
+}
+
 char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 {
 	uint8_t pkt[SSDV_PKT_SIZE];
@@ -1319,4 +1344,3 @@ void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet)
 }
 
 /*****************************************************************************/
-
