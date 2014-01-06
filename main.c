@@ -102,20 +102,23 @@ int main(int argc, char *argv[])
 	switch(encode)
 	{
 	case 0: /* Decode */
-		if(fread(pkt, 1, SSDV_PKT_SIZE, fin) > 0)
+		if(fread(pkt, 1, SSDV_PKT_SIZE, fin) < SSDV_PKT_SIZE)
+			break;
+
+		if( 0 == ssdv_dec_is_webp(pkt))
 		{
-			if( 0 == ssdv_dec_is_webp(pkt))
-			{
-				for ( i = WEBP_HEADER_LEN; i<WEBP_LEN; i++ ) {
-					webpdata[i] = pkt[i +WEBP_DATA_OFFSET -WEBP_HEADER_LEN];
-				}
-				//TODO: outfile name uses callsign+id+subid
-				// if(fout != stdout) fclose(fout);
-				fwrite(webpdata, 1, WEBP_LEN, fout);
-				fprintf(stderr, "Unpacked WebP image\n");
-				break;
+			webpdata[WEBP_FLAG_OFFSET+0] = pkt[WEBP_DATA_OFFSET -2];
+			webpdata[WEBP_FLAG_OFFSET+1] = pkt[WEBP_DATA_OFFSET -1];
+			for ( i = 0; i < WEBP_DATA_LEN; i++ ) {
+				webpdata[i +WEBP_HEADER_LEN] = pkt[i +WEBP_DATA_OFFSET];
 			}
+			//TODO: outfile name uses callsign+id+subid
+			// if(fout != stdout) fclose(fout);
+			fwrite(webpdata, 1, WEBP_LEN, fout);
+			fprintf(stderr, "Unpacked WebP image\n");
+			break;
 		}
+		
 		ssdv_dec_init(&ssdv);
 		
 		jpeg_length = 1024 * 1024 * 4;
@@ -131,7 +134,7 @@ int main(int argc, char *argv[])
 			/* Feed it to the decoder */
 			ssdv_dec_feed(&ssdv, pkt);
 			i++;
-		} while(fread(pkt, 1, SSDV_PKT_SIZE, fin) > 0);
+		} while(fread(pkt, 1, SSDV_PKT_SIZE, fin) == SSDV_PKT_SIZE);
 		
 		ssdv_dec_get_jpeg(&ssdv, &jpeg, &jpeg_length);
 		fwrite(jpeg, 1, jpeg_length, fout);
@@ -193,7 +196,10 @@ int main(int argc, char *argv[])
 
 		r = fread(&pkt[8], 1, WEBP_HEADER_LEN, fin);
 		//TODO: sanity check
-		r = fread(&pkt[8], 1, WEBP_DATA_LEN, fin);
+		pkt[8] = pkt[8 + WEBP_FLAG_OFFSET];
+		pkt[9] = pkt[9 + WEBP_FLAG_OFFSET];
+
+		r = fread(&pkt[10], 1, WEBP_DATA_LEN, fin);
 		//TODO: sanity check
 
 		i = crc32(&pkt[1], SSDV_PKT_SIZE_CRCDATA);

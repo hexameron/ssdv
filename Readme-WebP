@@ -12,7 +12,8 @@ Disadvantages:
 
 Strategy:
 	Keep it simple;
-	Split large image into small WebP sub-images (max 232 bytes);
+	Split large image into small WebP sub-images (max 240 bytes);
+	Use fixed 48 x 48 pixel images to reduce packet overhead;
 	Send each sub-image as a 256-byte SSDV packet;
 	Re-assemble image and convert (back) to jpeg.
 
@@ -20,7 +21,7 @@ Command line tools:
 
 	apt-get install libwebp
 
-	cwebp image.jpg -size 220 -pass 5 -crop 0 0 48 48 -o subimage.webp
+	cwebp image.jpg -size 230 -pass 3 -crop 0 0 48 48 -o subimage.webp
 	ssdv -i 0 -p 0 -c <name> subimage.webp subimage.ssdv
 	cat subimage.ssdv >/dev/ttyAMA0
 
