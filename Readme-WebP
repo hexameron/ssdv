@@ -3,12 +3,14 @@ WebP is a free jpeg replacement from Google. https://developers.google.com/speed
 Advantages:
 	Smaller filesizes than Jpeg for any quality;
 	Libwebp tools allow easy import of jpegs, resize, crop and recompression;
-	File size can be chosen to match SSDV packets.
+	File size can be chosen to match SSDV packets;
+	Independent blocks limit damage from dropped packets;
 
 Disadvantages:
 	Extra processing needed to compress;
 	Extra processing needed to decompress and convert back to jpeg;
 	Image size needs to be small because single errors cause total failure;
+	Fixed block size wastes bandwidth on "empty" blocks.
 
 Strategy:
 	Keep it simple;

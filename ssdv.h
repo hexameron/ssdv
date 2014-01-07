@@ -145,7 +145,7 @@ typedef struct {
 #define WEBP_CRC_OFFSET (10 + 210)
 #define WEBP_FEC_OFFSET (220 + 4)
 
-/* RIFF Header: "RIFFxxxxWEBPVP8 yyyy", length 240 = 8 + 0xd8 = 20 + 0xcc. (0xcc = 220 byte payload)*/
+/* RIFF Header: "RIFFxxxxWEBPVP8 yyyy", length 240 = 8 + 0xe8 = 20 + 0xdc = 20+10 + 210 byte payload*/
 /* Extended header : 2 bytes of flags(and size), 00,0x9d,01,0x2a, 4bytes (size 48,0,48,0) = 10bytes */
 #define WEBP_LEN (240)
 #define WEBP_HEADER_LEN (30)

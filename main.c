@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
 	FILE *fin = stdin;
 	FILE *fout = stdout;
 	char encode = -1;
-	char callsign[7];
+	char callsign[16];
 	uint8_t image_id = 0;
 	uint8_t subimage_id = 0;
 	ssdv_t ssdv;
@@ -46,6 +46,7 @@ int main(int argc, char *argv[])
 	uint8_t webpdata[WEBP_LEN] = WEBP_HEADER;
 	size_t r, jpeg_length;
 	
+	uint32_t callint;
 	callsign[0] = '\0';
 	
 	opterr = 0;
@@ -103,7 +104,10 @@ int main(int argc, char *argv[])
 	{
 	case 0: /* Decode */
 		if(fread(pkt, 1, SSDV_PKT_SIZE, fin) < SSDV_PKT_SIZE)
+		{
+			fprintf(stderr, "Read error, no packets.\n");
 			break;
+		}
 
 		if( 0 == ssdv_dec_is_webp(pkt))
 		{
@@ -112,8 +116,12 @@ int main(int argc, char *argv[])
 			for ( i = 0; i < WEBP_DATA_LEN; i++ ) {
 				webpdata[i +WEBP_HEADER_LEN] = pkt[i +WEBP_DATA_OFFSET];
 			}
-			//TODO: outfile name uses callsign+id+subid
-			// if(fout != stdout) fclose(fout);
+			if(fout == stdout) {
+				callint = (pkt[2]<<24)+(pkt[3]<<16)+(pkt[4]<<8)+(pkt[5]<<0);
+				decode_callsign(callsign,callint);
+				sprintf(callsign,"%s.%04x.webp", callsign, (pkt[6] << 8) + pkt[7]);
+				fout = fopen(callsign, "wb");
+			}
 			fwrite(webpdata, 1, WEBP_LEN, fout);
 			fprintf(stderr, "Unpacked WebP image\n");
 			break;
@@ -186,22 +194,27 @@ int main(int argc, char *argv[])
 	case 2:	/* webP Encoding */
 		pkt[0] = 0x55;
 		pkt[1] = 0x77;
-		i = encode_callsign(callsign);
-		pkt[2] = (uint8_t)(i>>24);
-		pkt[3] = (uint8_t)(i>>16);
-		pkt[4] = (uint8_t)(i>>8);
-		pkt[5] = (uint8_t)(i>>0); 
+		callint = encode_callsign(callsign);
+		pkt[2] = (uint8_t)(callint>>24);
+		pkt[3] = (uint8_t)(callint>>16);
+		pkt[4] = (uint8_t)(callint>>8);
+		pkt[5] = (uint8_t)(callint>>0); 
 		pkt[6] = (uint8_t)image_id;
 		pkt[7] = (uint8_t)subimage_id;
 
 		r = fread(&pkt[8], 1, WEBP_HEADER_LEN, fin);
-		//TODO: sanity check
+		for ( i = 0; i < 8; i++ )
+			if (pkt[8+8+i] != webpdata[8+i]) {
+				fprintf(stderr, "Warning: not a WebP image file.\n");
+				break;
+			}
 		pkt[8] = pkt[8 + WEBP_FLAG_OFFSET];
 		pkt[9] = pkt[9 + WEBP_FLAG_OFFSET];
 
 		r = fread(&pkt[10], 1, WEBP_DATA_LEN, fin);
-		//TODO: sanity check
-
+		if ( r < 120 ) {
+			fprintf(stderr, "Warning: WebP image file below expected size.\n");
+		}
 		i = crc32(&pkt[1], SSDV_PKT_SIZE_CRCDATA);
 		pkt[WEBP_CRC_OFFSET+0] = (uint8_t)(i>>24);
 		pkt[WEBP_CRC_OFFSET+1] = (uint8_t)(i>>16);
