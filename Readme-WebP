@@ -2,13 +2,15 @@ WebP is a free jpeg replacement from Google. https://developers.google.com/speed
 
 Advantages:
 	Smaller filesizes than Jpeg for any quality;
-	Libwebp tools allow easy import of jpegs, resize, crop and recompression;
+	Command line tools allow easy import of images, crop, resize and compression;
 	File size can be chosen to match SSDV packets;
 	Independent blocks limit damage from dropped packets;
 
 Disadvantages:
 	Extra processing needed to compress;
+		(May take several tries to get required image size)
 	Extra processing needed to decompress and convert back to jpeg;
+		( Chromium can display webp images, so a simple html viewer is possible )
 	Image size needs to be small because single errors cause total failure;
 	Fixed block size wastes bandwidth on "empty" blocks.
 
@@ -21,12 +23,19 @@ Strategy:
 
 Command line tools:
 
-	apt-get install libwebp
+	apt-get install webp libwebp libwebp-dev
 
-	cwebp image.jpg -size 230 -pass 3 -crop 0 0 48 48 -o subimage.webp
+	cwebp image.jpg -segments 2 -size 240 -pass 4 -crop 0 0 48 48 -o subimage.webp
 	ssdv -i 0 -p 0 -c <name> subimage.webp subimage.ssdv
 	cat subimage.ssdv >/dev/ttyAMA0
 
 	ssdv -d subimage.ssdv newsubimage.webp
 	dwebp -ppm newsubimage.webp -o newsubimage.ppm
+
+	Reassemble with ImageMagick. (can be built with webp support)
+
+Detais:
+	A 48x48 pixel block size was chosen to match the size of jpeg images that gave the desired quality. Other block sizes may be suitable for different uses. 
+	With 9 16x16 macroblocks in 210 bytes it is counterproductive to use more than two "segments" (groups of macroblocks with different levels of detail). Using one segment gives more predictable compression, with some loss of detail - the difference in quality is subjective.
+	It may be necessary to rewrite cwebp so that it always packs images BELOW the given size.
 

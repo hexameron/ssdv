@@ -215,6 +215,8 @@ int main(int argc, char *argv[])
 		if ( r < 120 ) {
 			fprintf(stderr, "Warning: WebP image file below expected size.\n");
 		}
+		if (fread(&pkt[WEBP_CRC_OFFSET], 1, 4, fin) > 0) 
+			fprintf(stderr, "Warning: WebP image file above maximum size.\n");
 		i = crc32(&pkt[1], SSDV_PKT_SIZE_CRCDATA);
 		pkt[WEBP_CRC_OFFSET+0] = (uint8_t)(i>>24);
 		pkt[WEBP_CRC_OFFSET+1] = (uint8_t)(i>>16);
