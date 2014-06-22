@@ -1,10 +1,15 @@
 WebP is a free jpeg replacement from Google. https://developers.google.com/speed/webp/
 
+Summary:
+	There are few applicatons where this method would be considered an improvement. For large images it is better to compress the whole image to a variable size depending on content. Jpeg can cope with occasional packetloss better than WebP, so it is worth sending slightly larger images. There is a niche case for Thumbnail images, where you can justify a fixed block size. To get anything that could be called "video" at 600 baud you would need to be sending a complete frame in each 256 byte packet; that is possible with this code, but the resulting 48x48 thumbnails barely count as images. It may be worth considering 96x96 VP8 streams.
+
+
+
 Advantages:
-	Smaller filesizes than Jpeg for any quality;
+	WebP offers smaller filesizes than Jpeg for any quality;
 	Command line tools allow easy import of images, crop, resize and compression;
 	File size can be chosen to match SSDV packets;
-	Independent blocks limit damage from dropped packets;
+	Compressing independent blocks limits the damage from dropped packets;
 
 Disadvantages:
 	Extra processing needed to compress;
@@ -25,7 +30,7 @@ Command line tools:
 
 	apt-get install webp libwebp libwebp-dev
 
-	cwebp image.jpg -segments 2 -size 240 -pass 4 -crop 0 0 48 48 -o subimage.webp
+	cwebp image.jpg -segments 2 -size 230 -pass 5 -crop 0 0 48 48 -o subimage.webp
 	ssdv -i 0 -p 0 -c <name> subimage.webp subimage.ssdv
 	cat subimage.ssdv >/dev/ttyAMA0
 
@@ -36,6 +41,6 @@ Command line tools:
 
 Detais:
 	A 48x48 pixel block size was chosen to match the size of jpeg images that gave the desired quality. Other block sizes may be suitable for different uses. 
-	With 9 16x16 macroblocks in 210 bytes it is counterproductive to use more than two "segments" (groups of macroblocks with different levels of detail). Using one segment gives more predictable compression, with some loss of detail - the difference in quality is subjective.
-	It may be necessary to rewrite cwebp so that it always packs images BELOW the given size.
+	With 9 16x16 macroblocks in 210 bytes it is counterproductive to use more than two "segments" (groups of macroblocks with different levels of detail).
+	It is necessary to rewrite libwebp so that it always packs images below the SSDV block size. A patch is provided for improved size matching but more than 5 passes may be needed for the best results.
 

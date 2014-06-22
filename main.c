@@ -122,7 +122,8 @@ int main(int argc, char *argv[])
 				sprintf(callsign,"%s.%04x.webp", callsign, (pkt[6] << 8) + pkt[7]);
 				fout = fopen(callsign, "wb");
 			}
-			fwrite(webpdata, 1, WEBP_LEN, fout);
+			if (fout)
+				fwrite(webpdata, 1, WEBP_LEN, fout);
 			fprintf(stderr, "Unpacked WebP image\n");
 			break;
 		}
