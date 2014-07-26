@@ -1,5 +1,13 @@
 WebP is a free jpeg replacement from Google. https://developers.google.com/speed/webp/
 
+V 2.0:
+-----
+	Increased block size to 64x64; with a fixed datarate you get a fixed amount of detail in each image: larger blocks allow for images with low detail. Some highly detailed areas may not compress to this level; be prepared to filter or scale images before compression.
+
+example: cwebp image.jpg -segments 1 -size 230 -pass 9 -crop 0 0 64 64 -o subimage.webp
+
+V 1.0:
+-----
 Summary:
 	There are few applicatons where this method would be considered an improvement. For large images it is better to compress the whole image to a variable size depending on content. Jpeg can cope with occasional packetloss better than WebP, so it is worth sending slightly larger images. There is a niche case for Thumbnail images, where you can justify a fixed block size. To get anything that could be called "video" at 600 baud you would need to be sending a complete frame in each 256 byte packet; that is possible with this code, but the resulting 48x48 thumbnails barely count as images. It may be worth considering 96x96 VP8 streams.
 
