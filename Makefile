@@ -1,20 +1,18 @@
-
 CC=gcc
-CFLAGS=-g -O3 -Wall
+CFLAGS=-g -O3 -Wall -DUSE_SIMD
 LDFLAGS=-g
 
-all: ssdv
+all: ssdv-cbec
 
-ssdv: main.o ssdv.o rs8.o ssdv.h rs8.h
-	$(CC) $(LDFLAGS) main.o ssdv.o rs8.o -o ssdv
+ssdv-cbec: main.o ssdv.o rs8.o ssdv.h rs8.h
+	$(CXX) $(LDFLAGS) main.o ssdv.o rs8.o -o ssdv-cbec -lcm256
 
 .c.o:
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CXX) $(CFLAGS) -c $< -o $@ -lcm256
 
 install: all
 	mkdir -p ${DESTDIR}/usr/bin
-	install -m 755 ssdv ${DESTDIR}/usr/bin
+	install -m 755 ssdv-cbec ${DESTDIR}/usr/bin
 
 clean:
-	rm -f *.o ssdv
-
+	rm -f *.o ssdv-cbec
