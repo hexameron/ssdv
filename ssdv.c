@@ -413,14 +413,8 @@ char ssdv_dec_recover_data(ssdv_t *s)
 
     for (seq = 0; seq < s->sequences; seq++) {
 
-        /* if we have sufficent blocks to recover */
-        if (s->cbec_blocks_counts[seq] >= s->blocks) {
-            /* attempt to recover */
-            if (cm256_decode(s->params, &s->cbec_matrix[(seq*256)])) {
-                return(SSDV_ERROR);
-            }
-        } else {
-            /* can't recover */
+        /* attempt to recover */
+        if (cm256_decode(s->params, &s->cbec_matrix[(seq*256)])) {
             return(SSDV_ERROR);
         }
     }
@@ -435,33 +429,47 @@ char ssdv_dec_get_data(ssdv_t *s, uint8_t** data, uint8_t* length)
 {
     uint16_t i = 0;
 
-    if (s->blk >= s->blocks) {
-        return(SSDV_EOI);       /* done */
+    while (1) {
+
+        if (s->blk >= s->blocks) {
+            return(SSDV_EOI);       /* done */
+        }
+
+        /* find block */
+        /* TODO: less brute-forcey-method */
+        for (i = 0; (i < 256) &&
+                 (s->cbec_matrix[(s->seq*256)+i].Index != s->blk); i++);
+
+        if (i < 256) {              /* found it */
+            /* return pointer to block */
+            *data = (uint8_t*)s->cbec_matrix[(s->seq*256)+i].Block;
+        } else {                    /* block not found */
+            *data = NULL;
+        }
+
+        /* for the final block length is minus leftovers */
+        if (s->blk == (s->blocks-1)) {
+            *length = s->pkt_size_payload - s->leftovers[s->seq];
+        } else {
+            *length = s->pkt_size_payload;
+        }
+
+        /* rotate to next sequence */
+        s->seq++;
+        if (s->seq >= s->sequences) {
+            /* start next block */
+            s->seq = 0;
+            s->blk++;
+        }
+
+
+        if (*data == NULL) {        /* uhh, no block here */
+            /* maybe a partial, continue to next  */
+            continue;
+        }
+
+        return(SSDV_OK);
     }
-
-    /* find block */
-    /* TODO: less brute-forcey-method */
-    for (i = 0; s->cbec_matrix[(s->seq*256)+i].Index != s->blk; i++);
-
-    /* return pointer to block */
-    *data = (uint8_t*)s->cbec_matrix[(s->seq*256)+i].Block;
-
-    /* for the final block length is minus leftovers */
-    if (s->blk == (s->blocks-1)) {
-        *length = s->pkt_size_payload - s->leftovers[s->seq];
-    } else {
-        *length = s->pkt_size_payload;
-    }
-
-    /* rotate to next sequence */
-    s->seq++;
-    if (s->seq >= s->sequences) {
-        /* start next block */
-        s->seq = 0;
-        s->blk++;
-    }
-
-    return(SSDV_OK);
 }
 
 char ssdv_dec_is_packet(uint8_t *packet, int *errors)

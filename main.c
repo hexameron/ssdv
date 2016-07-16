@@ -179,11 +179,8 @@ int main(int argc, char *argv[])
         /* Run recovery operations */
 		c = ssdv_dec_recover_data(&ssdv);
 
-        if(c != SSDV_OK)
-        {
-            fprintf(stderr, "Error recovering data\n");
-            break;
-        }
+        /* recovery operation may fail */
+        /* but we should still output what we have */
 
         /* Write out received data */
         uint8_t* out_ptr;
