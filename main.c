@@ -34,6 +34,8 @@ void exit_usage()
 		"  -d Decode SSDV packets to data.\n"
 		"\n"
 		"  -n Encode packets with no FEC.\n"
+		"  -b Use original SSDV packet types (0x66 and 0x67) for "
+            "backwards compatibility.\n"
 		"  -t For testing, drops the specified percentage of packets while "
             "decoding.\n"
 		"  -c Set the callign. Accepts A-Z 0-9 and space, up to 6 characters.\n"
@@ -50,6 +52,7 @@ int main(int argc, char *argv[])
 	FILE *fout = stdout;
 	char encode = -1;
 	char type = SSDV_TYPE_CBEC;
+    char use_oldtype = 0;
 	int droptest = 0;
 	int verbose = 0;
 	int errors;
@@ -64,13 +67,14 @@ int main(int argc, char *argv[])
 	callsign[0] = '\0';
 
 	opterr = 0;
-	while((c = getopt(argc, argv, "ednc:i:t:v")) != -1)
+	while((c = getopt(argc, argv, "ednbc:i:t:v")) != -1)
 	{
 		switch(c)
 		{
 		case 'e': encode = 1; break;
 		case 'd': encode = 0; break;
         case 'n': type = SSDV_TYPE_CBEC_NOFEC; break;
+        case 'b': use_oldtype = 1; break;
 		case 'c':
 			if(strlen(optarg) > 6)
 				fprintf(stderr,
@@ -86,6 +90,14 @@ int main(int argc, char *argv[])
 
 	c = argc - optind;
 	if(c > 2) exit_usage();
+
+    /* Use old type for compatibility */
+    if (use_oldtype) {
+      switch(type) {
+        case SSDV_TYPE_CBEC:       type = SSDV_TYPE_OLD; break;
+        case SSDV_TYPE_CBEC_NOFEC: type = SSDV_TYPE_OLD_NOFEC; break;
+      }
+    }
 
 	for(i = 0; i < c; i++)
 	{
@@ -145,13 +157,11 @@ int main(int argc, char *argv[])
 
 				ssdv_dec_header(&p, pkt);
 				fprintf(stderr, "Decoded image packet. Callsign: %s,"
-                        " Image ID: %d, Resolution: %dx%d,"
+                        " Image ID: %d, "
                         " Packet ID: %d (%d errors corrected)\n"
                         ">> Type: %d, EOI: %d\n",
 					p.callsign_s,
 					p.image_id,
-					p.width,
-					p.height,
 					p.packet_id,
 					errors,
 					p.type,

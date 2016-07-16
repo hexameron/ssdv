@@ -42,6 +42,8 @@ extern "C" {
 #define SSDV_MAX_CALLSIGN (6) /* Maximum number of characters in a callsign */
 
 #define SSDV_TYPE_INVALID    (0xFF)
+#define SSDV_TYPE_OLD        (0x00)
+#define SSDV_TYPE_OLD_NOFEC  (0x01)
 #define SSDV_TYPE_CBEC       (0x02)
 #define SSDV_TYPE_CBEC_NOFEC (0x03)
 
