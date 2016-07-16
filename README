@@ -45,12 +45,11 @@ about 10MB using the same protocol.
 | 2  | Callsign    | 4 | Base-40 encoded callsign. Up to 6 digits
 | 6  | Image ID    | 1 | Normally beginning at 0 and incremented by 1 for each new image
 | 7  | Packet      | 2 | The packet number, beginning at 0 for each new image (big endian)
-| 9  | Width       | 1 | Width of the image (pixels / 16) 0 = Invalid
-| 10 | Height      | 1 | Height of the image (pixels / 16) 0 = Invalid
-| 11 | Flags       | 1 | 00000e00: 00 = Reserved, e = EOI flag (1 = Last Packet)
-| 12 | Sequences   | 1 | Number of CBEC sequences 0 = Invalid
-| 13 | Blocks      | 1 | Number of Original Blocks per CBEC sequence
-| 14 | Leftovers   | 1 | Number of unused bytes at the end of the last block of this sequence.
+| 9  | Sequences   | 1 | Number of CBEC sequences. 0 = Invalid
+| 10 | Blocks      | 1 | Number of Original Blocks per CBEC sequence. 0 = Invalid
+| 11 | Flags       | 1 | 01000e00: 01 = CBEC Mode, 000 = Reserved, e = EOI flag (1 = Last Packet), 00 = Reserved
+| 12 | Leftovers   | 1 | Number of unused bytes at the end of the last block of this sequence.
+| 13 |             | 2 | 0xFFFF for compatibility.
 | 15 | Payload     | 205/237 | Payload data
 | 220/252 | Checksum | 4 | 32-bit CRC
 | 224 | FEC        | 32 | Reed-Solomon forward error correction data. Normal mode only (0x68)
@@ -83,5 +82,4 @@ make
 
 ## TODO
 
-* Allow image width/height parameters to be specified from the command line.
 * use cmake to set NO_SIMD/USE_NEON/USE_SIMD automagically

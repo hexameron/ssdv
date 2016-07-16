@@ -167,10 +167,6 @@ char ssdv_enc_init(ssdv_t *s, uint8_t type, char *callsign, uint8_t image_id)
 	s->type = type;
 	ssdv_set_packet_conf(s);
 
-    /* TODO Set width/height some other way */
-    s->width = 16;
-    s->height = 16;
-
 	return(SSDV_OK);
 }
 
@@ -275,13 +271,13 @@ char ssdv_enc_get_packet(ssdv_t *s, uint8_t *pkt)
     pkt[6]   = s->image_id;         /* Image ID */
     pkt[7]   = s->packet_id >> 8;   /* Packet ID MSB */
     pkt[8]   = s->packet_id & 0xFF; /* Packet ID LSB */
-    pkt[9]   = s->width >> 4;       /* Width / 16 */
-    pkt[10]  = s->height >> 4;      /* Height / 16 */
-    pkt[11]  = 0x00;
+    pkt[9]   = s->sequences;        /* Number of CBEC sequences */
+    pkt[10]  = s->blocks; /* Number of Originial Blocks per CBEC sequence */
+    pkt[11]  = 0b01000000;
     pkt[11] |= (r == SSDV_EOI ? 1 : 0) << 2; /* EOI flag (1 bit) */
-    pkt[12]  = s->sequences;
-    pkt[13]  = s->blocks;
-    pkt[14]  = s->leftovers[s->seq];
+    pkt[12]  = s->leftovers[s->seq];
+    pkt[13]  = 0xFF;            /* compatibility */
+    pkt[14]  = 0xFF;            /* compatibility */
 
     /* populate the payload */
     memcpy(&pkt[SSDV_PKT_SIZE_HEADER], outp, s->pkt_size_payload);
@@ -366,10 +362,8 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		s->callsign  = (packet[2] << 24) | (packet[3] << 16) |
           (packet[4] << 8) | packet[5];
 		s->image_id  = packet[6];
-		s->width     = packet[9] << 4;
-		s->height    = packet[10] << 4;
-        s->sequences = packet[12];
-        s->blocks    = packet[13];
+        s->sequences = packet[9];
+        s->blocks    = packet[10];
 
 		/* Configure the payload size and CRC position */
 		ssdv_set_packet_conf(s);
@@ -381,7 +375,8 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		fprintf(stderr, "Callsign: %s\n",
                 decode_callsign(callsign, s->callsign));
 		fprintf(stderr, "Image ID: %02X\n", s->image_id);
-		fprintf(stderr, "Resolution: %ix%i\n", s->width, s->height);
+		fprintf(stderr, "Sequences: %i\n", s->sequences);
+		fprintf(stderr, "Blocks: %i\n",    s->blocks);
 	}
 
     /* Convert packet ID to sequence and block index */
@@ -389,7 +384,7 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
     index = packet_id / s->sequences;
 
     /* record leftovers */
-    s->leftovers[seq] = packet[14];
+    s->leftovers[seq] = packet[12];
 
     /* Fill in this packet in the CBEC matrix */
     count = s->cbec_blocks_counts[seq];
@@ -559,7 +554,7 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 	ssdv_dec_header(&p, pkt);
 
 	if(p.type != type) return(-1);
-	if(p.width == 0 || p.height == 0) return(-1);
+	if(p.sequences == 0 || p.blocks == 0) return(-1);
 
 	/* Appears to be a valid packet! Copy it back */
 	memcpy(packet, pkt, SSDV_PKT_SIZE);
@@ -575,11 +570,9 @@ void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet)
 	decode_callsign(info->callsign_s, info->callsign);
 	info->image_id   = packet[6];
 	info->packet_id  = (packet[7] << 8) | packet[8];
-	info->width      = packet[9] << 4;
-	info->height     = packet[10] << 4;
+    info->sequences  = packet[9];
+    info->blocks     = packet[10];
 	info->eoi        = (packet[11] >> 2) & 1;
-    info->sequences  = packet[12];
-    info->blocks     = packet[13];
 }
 
 /*****************************************************************************/
