@@ -94,17 +94,19 @@ static void ssdv_set_packet_conf(ssdv_t *s)
 	/* Configure the payload size and CRC position */
 	switch(s->type)
 	{
-	case SSDV_TYPE_CBEC:
-		s->pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER -
-          SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
-		s->pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + s->pkt_size_payload - 1;
-		break;
+        case SSDV_TYPE_OLD:
+        case SSDV_TYPE_CBEC:
+            s->pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER -
+                SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
+            s->pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + s->pkt_size_payload - 1;
+            break;
 
-	case SSDV_TYPE_CBEC_NOFEC:
-		s->pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER -
-          SSDV_PKT_SIZE_CRC;
-		s->pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + s->pkt_size_payload - 1;
-		break;
+        case SSDV_TYPE_OLD_NOFEC:
+        case SSDV_TYPE_CBEC_NOFEC:
+            s->pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER -
+                SSDV_PKT_SIZE_CRC;
+            s->pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + s->pkt_size_payload - 1;
+            break;
 	}
 }
 
@@ -166,10 +168,6 @@ char ssdv_enc_init(ssdv_t *s, uint8_t type, char *callsign, uint8_t image_id)
 	s->type = type;
 	ssdv_set_packet_conf(s);
 
-    /* TODO Set width/height some other way */
-    s->width = 16;
-    s->height = 16;
-
 	return(SSDV_OK);
 }
 
@@ -197,10 +195,10 @@ char ssdv_enc_set_buffer(ssdv_t *s, uint8_t *buffer, size_t length)
     uint8_t leftover;
     int16_t seq;
     for (seq = s->sequences-1; seq >= 0; seq--) {
-      leftover = (bytes_leftover > s->pkt_size_payload) ?
-        s->pkt_size_payload : bytes_leftover;
-      s->leftovers[seq] = leftover;
-      bytes_leftover -= leftover;
+        leftover = (bytes_leftover > s->pkt_size_payload) ?
+            s->pkt_size_payload : bytes_leftover;
+        s->leftovers[seq] = leftover;
+        bytes_leftover -= leftover;
     }
 
     /* generate recovery blocks for each sequence */
@@ -274,13 +272,13 @@ char ssdv_enc_get_packet(ssdv_t *s, uint8_t *pkt)
     pkt[6]   = s->image_id;         /* Image ID */
     pkt[7]   = s->packet_id >> 8;   /* Packet ID MSB */
     pkt[8]   = s->packet_id & 0xFF; /* Packet ID LSB */
-    pkt[9]   = s->width >> 4;       /* Width / 16 */
-    pkt[10]  = s->height >> 4;      /* Height / 16 */
-    pkt[11]  = 0x00;
+    pkt[9]   = s->sequences;        /* Number of CBEC sequences */
+    pkt[10]  = s->blocks; /* Number of Originial Blocks per CBEC sequence */
+    pkt[11]  = 0b01000000;
     pkt[11] |= (r == SSDV_EOI ? 1 : 0) << 2; /* EOI flag (1 bit) */
-    pkt[12]  = s->sequences;
-    pkt[13]  = s->blocks;
-    pkt[14]  = s->leftovers[s->seq];
+    pkt[12]  = s->leftovers[s->seq];
+    pkt[13]  = 0xFF;            /* compatibility */
+    pkt[14]  = 0xFF;            /* compatibility */
 
     /* populate the payload */
     memcpy(&pkt[SSDV_PKT_SIZE_HEADER], outp, s->pkt_size_payload);
@@ -295,8 +293,11 @@ char ssdv_enc_get_packet(ssdv_t *s, uint8_t *pkt)
     pkt[i++] = x & 0xFF;
 
     /* Generate the RS codes */
-    if(s->type == SSDV_TYPE_CBEC)
+    if((s->type == SSDV_TYPE_OLD) ||
+       (s->type == SSDV_TYPE_CBEC)) {
+
         encode_rs_8(&pkt[1], &pkt[i], 0);
+    }
 
     /* Increment packet ID */
     s->packet_id++;
@@ -350,7 +351,7 @@ char ssdv_dec_set_buffer(ssdv_t *s, uint8_t *buffer, size_t length)
 char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 {
 	uint8_t seq, index, count;
-	uint16_t packet_id;
+	uint16_t packet_id, j;
 
 	/* Read the packet header */
 	packet_id            = (packet[7] << 8) | packet[8];
@@ -363,12 +364,10 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		/* Read the fixed headers from the packet */
 		s->type      = packet[1] - 0x66;
 		s->callsign  = (packet[2] << 24) | (packet[3] << 16) |
-          (packet[4] << 8) | packet[5];
+            (packet[4] << 8) | packet[5];
 		s->image_id  = packet[6];
-		s->width     = packet[9] << 4;
-		s->height    = packet[10] << 4;
-        s->sequences = packet[12];
-        s->blocks    = packet[13];
+        s->sequences = packet[9];
+        s->blocks    = packet[10];
 
 		/* Configure the payload size and CRC position */
 		ssdv_set_packet_conf(s);
@@ -380,7 +379,8 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		fprintf(stderr, "Callsign: %s\n",
                 decode_callsign(callsign, s->callsign));
 		fprintf(stderr, "Image ID: %02X\n", s->image_id);
-		fprintf(stderr, "Resolution: %ix%i\n", s->width, s->height);
+		fprintf(stderr, "Sequences: %i\n", s->sequences);
+		fprintf(stderr, "Blocks: %i\n",    s->blocks);
 	}
 
     /* Convert packet ID to sequence and block index */
@@ -388,10 +388,19 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
     index = packet_id / s->sequences;
 
     /* record leftovers */
-    s->leftovers[seq] = packet[14];
+    s->leftovers[seq] = packet[12];
 
-    /* Fill in this packet in the CBEC matrix */
+    /* get the current matrix insertion count for this sequence */
     count = s->cbec_blocks_counts[seq];
+
+    /* check if we already have this index, if so discard and continue */
+    for (j = 0; j < count; j++) {
+        if (s->cbec_matrix[(seq*256)+j].Index == index) {
+            return (SSDV_FEED_ME);
+        }
+    }
+
+    /* otherwise fill in this packet in the CBEC matrix */
     s->cbec_matrix[(seq*256)+count].Block = s->outp;
     s->cbec_matrix[(seq*256)+count].Index = index;
     s->cbec_blocks_counts[seq]++;
@@ -408,23 +417,27 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
  */
 char ssdv_dec_recover_data(ssdv_t *s)
 {
-    uint8_t seq;
+    uint8_t seq, partial = 0;
 
     for (seq = 0; seq < s->sequences; seq++) {
 
-        /* if we have sufficent blocks to recover */
-        if (s->cbec_blocks_counts[seq] >= s->blocks) {
-            /* attempt to recover */
-            if (cm256_decode(s->params, &s->cbec_matrix[(seq*256)])) {
+        /* note if sequence is partial */
+        if (s->cbec_blocks_counts[seq] < s->blocks) {
+            partial = 1;
+        }
+        /* attempt to recover */
+        if (cm256_decode(s->params, &s->cbec_matrix[(seq*256)])) {
+            if(!partial) {      /* we expect partials to error */
                 return(SSDV_ERROR);
             }
-        } else {
-            /* can't recover */
-            return(SSDV_ERROR);
         }
     }
 
-	return(SSDV_OK);
+    if (partial) {
+        return(SSDV_PARTIAL);
+    } else {
+        return(SSDV_OK);
+    }
 }
 
 /**
@@ -434,33 +447,47 @@ char ssdv_dec_get_data(ssdv_t *s, uint8_t** data, uint8_t* length)
 {
     uint16_t i = 0;
 
-    if (s->blk >= s->blocks) {
-        return(SSDV_EOI);       /* done */
+    while (1) {
+
+        if (s->blk >= s->blocks) {
+            return(SSDV_EOI);       /* done */
+        }
+
+        /* find block */
+        /* TODO: less brute-forcey-method */
+        for (i = 0; (i < 256) &&
+                 (s->cbec_matrix[(s->seq*256)+i].Index != s->blk); i++);
+
+        if (i < 256) {              /* found it */
+            /* return pointer to block */
+            *data = (uint8_t*)s->cbec_matrix[(s->seq*256)+i].Block;
+        } else {                    /* block not found */
+            *data = NULL;
+        }
+
+        /* for the final block length is minus leftovers */
+        if (s->blk == (s->blocks-1)) {
+            *length = s->pkt_size_payload - s->leftovers[s->seq];
+        } else {
+            *length = s->pkt_size_payload;
+        }
+
+        /* rotate to next sequence */
+        s->seq++;
+        if (s->seq >= s->sequences) {
+            /* start next block */
+            s->seq = 0;
+            s->blk++;
+        }
+
+
+        if (*data == NULL) {        /* uhh, no block here */
+            /* maybe a partial, continue to next  */
+            continue;
+        }
+
+        return(SSDV_OK);
     }
-
-    /* find block */
-    /* TODO: less brute-forcey-method */
-    for (i = 0; s->cbec_matrix[(s->seq*256)+i].Index != s->blk; i++);
-
-    /* return pointer to block */
-    *data = (uint8_t*)s->cbec_matrix[(s->seq*256)+i].Block;
-
-    /* for the final block length is minus leftovers */
-    if (s->blk == (s->blocks-1)) {
-      *length = s->pkt_size_payload - s->leftovers[s->seq];
-    } else {
-      *length = s->pkt_size_payload;
-    }
-
-    /* rotate to next sequence */
-    s->seq++;
-    if (s->seq >= s->sequences) {
-        /* start next block */
-        s->seq = 0;
-        s->blk++;
-    }
-
-    return(SSDV_OK);
 }
 
 char ssdv_dec_is_packet(uint8_t *packet, int *errors)
@@ -479,11 +506,12 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 
 	type = SSDV_TYPE_INVALID;
 
-	if(pkt[1] == 0x66 + SSDV_TYPE_CBEC_NOFEC)
+	if((pkt[1] == 0x66 + SSDV_TYPE_CBEC_NOFEC) ||
+       (pkt[1] == 0x66 + SSDV_TYPE_OLD_NOFEC))
 	{
 		/* Test for a valid NOFEC packet */
 		pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER -
-          SSDV_PKT_SIZE_CRC;
+            SSDV_PKT_SIZE_CRC;
 		pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + pkt_size_payload - 1;
 
 		/* No FEC scan */
@@ -494,17 +522,18 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 
 		i = 1 + pkt_size_crcdata;
 		if(x == ((uint32_t)(pkt[i + 3]      ) | (pkt[i + 2] <<  8) |
-                 (pkt[i + 1] << 16) | (pkt[i]     << 24)))
+				   (pkt[i + 1] << 16) | (pkt[i]     << 24)))
 		{
 			/* Valid, set the type and continue */
 			type = SSDV_TYPE_CBEC_NOFEC;
 		}
 	}
-	else if(pkt[1] == 0x66 + SSDV_TYPE_CBEC)
+	else if((pkt[1] == 0x66 + SSDV_TYPE_CBEC) ||
+            (pkt[1] == 0x66 + SSDV_TYPE_OLD))
 	{
 		/* Test for a valid NORMAL packet */
 		pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER -
-          SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
+            SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
 		pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + pkt_size_payload - 1;
 
 		/* No FEC scan */
@@ -515,7 +544,7 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 
 		i = 1 + pkt_size_crcdata;
 		if(x == ((uint32_t)(pkt[i + 3]      ) | (pkt[i + 2] <<  8) |
-                 (pkt[i + 1] << 16) | (pkt[i]     << 24)))
+				   (pkt[i + 1] << 16) | (pkt[i]     << 24)))
 		{
 			/* Valid, set the type and continue */
 			type = SSDV_TYPE_CBEC;
@@ -526,59 +555,67 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 	{
 		/* Test for a valid NORMAL packet with correctable errors */
 		pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER -
-          SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
+            SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
 		pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + pkt_size_payload - 1;
 
 		/* Run the reed-solomon decoder */
 		pkt[1] = 0x66 + SSDV_TYPE_CBEC;
 		i = decode_rs_8(&pkt[1], 0, 0, 0);
 
-		if(i < 0) return(-1); /* Reed-solomon decoder failed */
-		if(errors) *errors = i;
+        if (i < 0) { /* Reed-solomon decoder failed */
+            /* Maybe it had the old type? */
 
-		/* Test the checksum */
-		x = crc32(&pkt[1], pkt_size_crcdata);
+            /* Run the reed-solomon decoder */
+            pkt[1] = 0x66 + SSDV_TYPE_OLD;
+            i = decode_rs_8(&pkt[1], 0, 0, 0);
 
-		i = 1 + pkt_size_crcdata;
-		if(x == ((uint32_t)(pkt[i + 3]      ) | (pkt[i + 2] <<  8) |
-                 (pkt[i + 1] << 16) | (pkt[i]     << 24)))
-		{
-			/* Valid, set the type and continue */
-			type = SSDV_TYPE_CBEC;
-		}
-	}
+            if(i < 0) return(-1); /* Reed-solomon decoder failed */
+        }
 
-	if(type == SSDV_TYPE_INVALID)
-	{
-		/* All attempts to read the packet have failed */
-		return(-1);
-	}
+        /* Record errors */
+        if(errors) *errors = i;
 
-	/* Sanity checks */
-	ssdv_dec_header(&p, pkt);
+        /* Test the checksum */
+        x = crc32(&pkt[1], pkt_size_crcdata);
 
-	if(p.type != type) return(-1);
-	if(p.width == 0 || p.height == 0) return(-1);
+        i = 1 + pkt_size_crcdata;
+        if(x == ((uint32_t)(pkt[i + 3]      ) | (pkt[i + 2] <<  8) |
+			   (pkt[i + 1] << 16) | (pkt[i]     << 24)))
+        {
+            /* Valid, set the type and continue */
+            type = SSDV_TYPE_CBEC;
+        }
+    }
 
-	/* Appears to be a valid packet! Copy it back */
-	memcpy(packet, pkt, SSDV_PKT_SIZE);
+    if(type == SSDV_TYPE_INVALID)
+    {
+        /* All attempts to read the packet have failed */
+        return(-1);
+    }
 
-	return(0);
+    /* Sanity checks */
+    ssdv_dec_header(&p, pkt);
+
+    if(p.type != type) return(-1);
+    if(p.sequences == 0 || p.blocks == 0) return(-1);
+
+    /* Appears to be a valid packet! Copy it back */
+    memcpy(packet, pkt, SSDV_PKT_SIZE);
+
+    return(0);
 }
 
 void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet)
 {
-	info->type       = packet[1] - 0x66;
-	info->callsign   = (packet[2] << 24) | (packet[3] << 16) |
-      (packet[4] << 8) | packet[5];
-	decode_callsign(info->callsign_s, info->callsign);
-	info->image_id   = packet[6];
-	info->packet_id  = (packet[7] << 8) | packet[8];
-	info->width      = packet[9] << 4;
-	info->height     = packet[10] << 4;
-	info->eoi        = (packet[11] >> 2) & 1;
-    info->sequences  = packet[12];
-    info->blocks     = packet[13];
+    info->type       = packet[1] - 0x66;
+    info->callsign   = (packet[2] << 24) | (packet[3] << 16) |
+        (packet[4] << 8) | packet[5];
+    decode_callsign(info->callsign_s, info->callsign);
+    info->image_id   = packet[6];
+    info->packet_id  = (packet[7] << 8) | packet[8];
+    info->sequences  = packet[9];
+    info->blocks     = packet[10];
+    info->eoi        = (packet[11] >> 2) & 1;
 }
 
 /*****************************************************************************/
