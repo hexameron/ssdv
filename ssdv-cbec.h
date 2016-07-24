@@ -42,6 +42,8 @@ extern "C" {
 #define SSDV_MAX_CALLSIGN (6) /* Maximum number of characters in a callsign */
 
 #define SSDV_TYPE_INVALID    (0xFF)
+#define SSDV_TYPE_OLD        (0x00)
+#define SSDV_TYPE_OLD_NOFEC  (0x01)
 #define SSDV_TYPE_CBEC       (0x02)
 #define SSDV_TYPE_CBEC_NOFEC (0x03)
 
@@ -54,8 +56,6 @@ typedef struct
 	uint16_t pkt_size_crcdata;
 
 	/* Image information */
-	uint16_t width;
-	uint16_t height;
 	uint32_t callsign;
 	uint8_t  image_id;
 	uint16_t packet_id;
@@ -86,8 +86,6 @@ typedef struct {
 	char     callsign_s[SSDV_MAX_CALLSIGN + 1];
 	uint8_t  image_id;
 	uint16_t packet_id;
-	uint16_t width;
-	uint16_t height;
 	uint8_t  eoi;
     uint8_t  sequences;
     uint8_t  blocks;
