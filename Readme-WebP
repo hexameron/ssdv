@@ -1,23 +1,8 @@
 WebP is a free jpeg replacement from Google. https://developers.google.com/speed/webp/
 
-V 2.0:
------
-	Increased block size to 64x64; with a fixed datarate you get a fixed amount of detail in each image: larger blocks allow for images with low detail. Some highly detailed areas may not compress to this level; be prepared to filter or scale images before compression.
-
-example: cwebp image.jpg -segments 1 -size 230 -pass 9 -crop 0 0 64 64 -o subimage.webp
-
-V 1.0:
------
-Summary:
-	There are few applicatons where this method would be considered an improvement. For large images it is better to compress the whole image to a variable size depending on content. Jpeg can cope with occasional packetloss better than WebP, so it is worth sending slightly larger images. There is a niche case for Thumbnail images, where you can justify a fixed block size. To get anything that could be called "video" at 600 baud you would need to be sending a complete frame in each 256 byte packet; that is possible with this code, but the resulting 48x48 thumbnails barely count as images. It may be worth considering 96x96 VP8 streams.
-
-
-
-Advantages:
-	WebP offers smaller filesizes than Jpeg for any quality;
-	Command line tools allow easy import of images, crop, resize and compression;
-	File size can be chosen to match SSDV packets;
-	Compressing independent blocks limits the damage from dropped packets;
+V 3.0:	Switch to 320*16 blocks for sending waterfall streams.
+V 2.0:	Increased block size to 64x64.
+V 1.0:	Compressing independent blocks limits the damage from dropped packets;
 
 Disadvantages:
 	Extra processing needed to compress;
@@ -30,7 +15,7 @@ Disadvantages:
 Strategy:
 	Keep it simple;
 	Split large image into small WebP sub-images (max 240 bytes);
-	Use fixed 48 x 48 pixel images to reduce packet overhead;
+	Use fixed 320x16 pixel images to reduce packet overhead;
 	Send each sub-image as a 256-byte SSDV packet;
 	Re-assemble image and convert (back) to jpeg.
 
@@ -38,17 +23,16 @@ Command line tools:
 
 	apt-get install webp libwebp libwebp-dev
 
-	cwebp image.jpg -segments 2 -size 230 -pass 5 -crop 0 0 48 48 -o subimage.webp
+	cwebp image.jpg -segments 3 -size 230 -pass 5 -crop 0 0 320 16 -o subimage.webp
 	ssdv -i 0 -p 0 -c <name> subimage.webp subimage.ssdv
 	cat subimage.ssdv >/dev/ttyAMA0
 
 	ssdv -d subimage.ssdv newsubimage.webp
 	dwebp -ppm newsubimage.webp -o newsubimage.ppm
 
-	Reassemble with ImageMagick. (can be built with webp support)
+	Reassemble with ImageMagick. (webp support in recent versions)
 
 Detais:
-	A 48x48 pixel block size was chosen to match the size of jpeg images that gave the desired quality. Other block sizes may be suitable for different uses. 
-	With 9 16x16 macroblocks in 210 bytes it is counterproductive to use more than two "segments" (groups of macroblocks with different levels of detail).
-	It is necessary to rewrite libwebp so that it always packs images below the SSDV block size. A patch is provided for improved size matching but more than 5 passes may be needed for the best results.
+	A 320x16 pixel block size was chosen as the widest size that can reasonably fit in 210 bytes.
+	With 20 16x16 macroblocks in 210 bytes it is counterproductive to use more than one "segment" (groups of macroblocks with different levels of detail).
 
